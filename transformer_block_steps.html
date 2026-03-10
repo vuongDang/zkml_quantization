@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Transformer Block — Step by Step</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-chtml.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Georgia', serif;
+    background: #f0f2f7;
+    color: #1a1a2e;
+    padding: 40px 20px;
+  }
+  .page { max-width: 1400px; margin: 0 auto; }
+
+  h1 {
+    font-size: 2rem; font-weight: 700;
+    text-align: center; margin-bottom: 6px; color: #1a1a2e;
+  }
+  .subtitle {
+    text-align: center; color: #666;
+    font-size: 0.95rem; margin-bottom: 14px;
+  }
+  .dims-banner {
+    background: #1a1a2e; color: #e2e8f0;
+    border-radius: 8px; padding: 12px 24px;
+    text-align: center; font-family: monospace;
+    font-size: 0.92rem; margin-bottom: 36px; letter-spacing: 0.03em;
+  }
+  .dims-banner span { color: #7dd3fc; font-weight: bold; }
+
+  .section-label {
+    font-size: 0.72rem; font-weight: 700;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: #94a3b8; margin-bottom: 14px; margin-top: 40px;
+    padding-left: 4px;
+    border-left: 3px solid #e2e8f0;
+    padding-left: 10px;
+  }
+
+  /* Step card */
+  .step {
+    background: #fff; border-radius: 14px;
+    border: 1px solid #e2e8f0; margin-bottom: 24px;
+    overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .step-header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 22px; border-bottom: 1px solid #e9eef5;
+    background: #f7f9fc;
+  }
+  .step-num {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.85rem; flex-shrink: 0; color: #fff;
+  }
+  .step-title { font-size: 1.05rem; font-weight: 700; color: #1a1a2e; }
+  .step-shape {
+    margin-left: auto; font-family: monospace; font-size: 0.78rem;
+    background: #eef2f8; padding: 3px 12px; border-radius: 20px;
+    color: #475569; white-space: nowrap;
+  }
+  .zk-badge {
+    font-size: 0.68rem; font-weight: 700;
+    padding: 3px 10px; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+  }
+  .zk-easy   { background: #dcfce7; color: #166534; }
+  .zk-medium { background: #fef9c3; color: #854d0e; }
+  .zk-hard   { background: #fee2e2; color: #991b1b; }
+
+  /* Four-column body */
+  .step-body {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr 1fr 1.2fr;
+    gap: 0;
+  }
+  .col { padding: 20px 22px; }
+  .col-explain  { border-right: 1px solid #eef2f8; background: #fafbff; }
+  .col-generic  { border-right: 1px solid #eef2f8; }
+  .col-concrete { border-right: 1px solid #eef2f8; }
+
+  .col-label {
+    font-size: 0.66rem; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .col-label::before {
+    content: '';
+    display: inline-block;
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  .col-explain  .col-label { color: #8b5cf6; }
+  .col-explain  .col-label::before { background: #8b5cf6; }
+  .col-generic  .col-label { color: #3b82f6; }
+  .col-generic  .col-label::before { background: #3b82f6; }
+  .col-concrete .col-label { color: #f59e0b; }
+  .col-concrete .col-label::before { background: #f59e0b; }
+  .col-rust     .col-label { color: #10b981; }
+  .col-rust     .col-label::before { background: #10b981; }
+
+  .explain-text {
+    font-size: 0.88rem;
+    line-height: 1.75;
+    color: #374151;
+  }
+  .explain-text strong { color: #1a1a2e; }
+
+  .math-block { font-size: 0.9rem; line-height: 1.9; }
+  .note {
+    margin-top: 10px; font-size: 0.78rem; color: #64748b;
+    font-style: italic; border-left: 3px solid #e2e8f0; padding-left: 10px;
+    line-height: 1.5;
+  }
+
+  pre {
+    background: #0f172a;
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: 'Fira Mono', 'Courier New', monospace;
+    font-size: 0.74rem;
+    line-height: 1.65;
+    color: #e2e8f0;
+    margin: 0;
+    height: 100%;
+  }
+  .kw  { color: #c084fc; }
+  .ty  { color: #7dd3fc; }
+  .fn  { color: #86efac; }
+  .cm  { color: #64748b; font-style: italic; }
+  .nm  { color: #fcd34d; }
+  .st  { color: #fca5a5; }
+  .op  { color: #94a3b8; }
+  .lf  { color: #fb923c; }
+
+  .c1  { background: #6366f1; } .c2  { background: #3b82f6; }
+  .c3  { background: #0ea5e9; } .c4  { background: #ef4444; }
+  .c5  { background: #f59e0b; } .c6  { background: #10b981; }
+  .c7  { background: #8b5cf6; } .c8  { background: #6366f1; }
+  .c9  { background: #3b82f6; } .c10 { background: #ef4444; }
+  .c11 { background: #10b981; } .c12 { background: #8b5cf6; }
+
+  /* Shape table */
+  .shape-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .shape-table th { background: #1a1a2e; color: #e2e8f0; padding: 10px 16px; text-align: left; font-weight: 600; }
+  .shape-table td { padding: 8px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.83rem; }
+  .shape-table tr:nth-child(even) td { background: #f8fafc; }
+  .shape-table code { font-family: monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 3px; font-size: 0.8rem; }
+
+  @media (max-width: 1000px) {
+    .step-body { grid-template-columns: 1fr 1fr; }
+    .col-explain  { border-right: 1px solid #eef2f8; border-bottom: 1px solid #eef2f8; }
+    .col-generic  { border-right: none; border-bottom: 1px solid #eef2f8; }
+    .col-concrete { border-right: 1px solid #eef2f8; }
+  }
+  @media (max-width: 640px) {
+    .step-body { grid-template-columns: 1fr; }
+    .col-explain, .col-generic, .col-concrete { border-right: none; border-bottom: 1px solid #eef2f8; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Transformer Block — Step by Step</h1>
+  <p class="subtitle">What it does &nbsp;·&nbsp; Generic formula &nbsp;·&nbsp; Concrete example &nbsp;·&nbsp; Rust code</p>
+
+  <div class="dims-banner">
+    Concrete example dimensions:
+    <span>s=2</span> tokens &nbsp;·&nbsp;
+    <span>d=6</span> model dim &nbsp;·&nbsp;
+    <span>h=2</span> heads &nbsp;·&nbsp;
+    <span>d_k=3</span> per head &nbsp;·&nbsp;
+    <span>d_ff=12</span> FFN width
+  </div>
+
+  <!-- ═══════════════════════════ ATTENTION ══════════════════════════ -->
+  <div class="section-label">Multi-Head Attention</div>
+
+  <!-- ── Step 1 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c1">1</div>
+      <div class="step-title">LayerNorm (pre-norm)</div>
+      <span class="zk-badge zk-hard">ZK: Hard</span>
+      <div class="step-shape">[s × d] → [s × d]</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          Before any attention computation, each token's feature vector is <strong>normalized to zero mean and unit variance</strong>. This prevents the scale of activations from drifting across layers, which would destabilize training.<br><br>
+          Two learned scalars per feature — <strong>gamma (γ)</strong> and <strong>beta (β)</strong> — let the network re-scale and re-shift after normalization, so it doesn't lose expressive power.<br><br>
+          In <strong>pre-norm</strong> (modern) style, this happens <em>before</em> the attention sublayer. The residual path stays clean, making deep stacks much more stable to train.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[\mu_i = \frac{1}{d}\sum_{j=1}^{d} x_{ij}\]
+          \[\sigma^2_i = \frac{1}{d}\sum_{j=1}^{d}(x_{ij}-\mu_i)^2\]
+          \[\text{LN}(x)_i = \gamma \odot \frac{x_i - \mu_i}{\sqrt{\sigma^2_i + \epsilon}} + \beta\]
+          <p class="note">\(\gamma, \beta \in \mathbb{R}^d\) are learned. \(\epsilon=10^{-5}\) prevents division by zero. ZK-hard: variance and sqrt are non-polynomial.</p>
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete (row 1)</div>
+        <div class="math-block">
+          \[x_1 = [0.1,\ 0.2,\ 0.3,\ 0.4,\ 0.5,\ 0.6]\]
+          \[\mu = \tfrac{0.1{+}0.2{+}\cdots{+}0.6}{6} = 0.35\]
+          \[\sigma^2 = 0.0292,\quad \sigma = 0.171\]
+          \[\text{LN}(x)_1 \approx [-1.46,\ {-}0.88,\ {-}0.29,\ 0.29,\ 0.88,\ 1.46]\]
+          <p class="note">\(\gamma=\mathbf{1},\ \beta=\mathbf{0}\) (identity init). Shape stays [2×6].</p>
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="kw">pub fn</span> <span class="fn">forward</span>(<span class="op">&</span><span class="kw">self</span>, x: <span class="op">&</span><span class="ty">Matrix</span>) -> <span class="ty">Matrix</span> {
+  <span class="kw">let</span> d = x.cols;
+  <span class="kw">let mut</span> out = x.<span class="fn">clone</span>();
+  <span class="kw">for</span> i <span class="kw">in</span> <span class="nm">0</span>..x.rows {
+    <span class="cm">// mean over d features</span>
+    <span class="kw">let</span> mean: <span class="ty">f32</span> = (<span class="nm">0</span>..d)
+      .<span class="fn">map</span>(|j| x.<span class="fn">get</span>(i,j))
+      .<span class="fn">sum</span>::<<span class="ty">f32</span>>() / d <span class="kw">as</span> <span class="ty">f32</span>;
+    <span class="cm">// variance</span>
+    <span class="kw">let</span> var: <span class="ty">f32</span> = (<span class="nm">0</span>..d).<span class="fn">map</span>(|j| {
+      <span class="kw">let</span> diff = x.<span class="fn">get</span>(i,j) - mean;
+      diff * diff
+    }).<span class="fn">sum</span>::<<span class="ty">f32</span>>() / d <span class="kw">as</span> <span class="ty">f32</span>;
+    <span class="kw">let</span> std = (var + <span class="nm">1e-5_f32</span>).<span class="fn">sqrt</span>();
+    <span class="kw">for</span> j <span class="kw">in</span> <span class="nm">0</span>..d {
+      <span class="kw">let</span> n = (x.<span class="fn">get</span>(i,j) - mean) / std;
+      out.<span class="fn">set</span>(i, j,
+        <span class="kw">self</span>.gamma[j]*n + <span class="kw">self</span>.beta[j]);
+    }
+  }
+  out
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 2 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c2">2</div>
+      <div class="step-title">Linear Projections Q, K, V</div>
+      <span class="zk-badge zk-easy">ZK: Easy</span>
+      <div class="step-shape">[s × d] → [s × d] each</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          The normalized input is linearly projected into three separate spaces: <strong>Queries (Q)</strong>, <strong>Keys (K)</strong>, and <strong>Values (V)</strong>.<br><br>
+          Think of it like a database analogy: <strong>Q</strong> is "what I'm looking for", <strong>K</strong> is "what I advertise", and <strong>V</strong> is "what I actually give you". The network learns all three projection matrices during training.<br><br>
+          After projection, the full [s×d] matrices are <strong>split across h heads</strong>, giving each head a [s×d_k] slice to operate on independently. This lets different heads attend to different aspects simultaneously.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[Q = \text{LN}(x)\,W_Q + b_Q\]
+          \[K = \text{LN}(x)\,W_K + b_K\]
+          \[V = \text{LN}(x)\,W_V + b_V\]
+          \[W_{Q,K,V} \in \mathbb{R}^{d \times d},\quad b \in \mathbb{R}^d\]
+          <p class="note">Split per head: \(Q_i = Q[:,(i{-}1)d_k:id_k]\). LLaMA drops biases; GPT-2 keeps them.</p>
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete</div>
+        <div class="math-block">
+          \[\text{LN}(x) \in \mathbb{R}^{2\times6} \xrightarrow{\times W_Q} Q \in \mathbb{R}^{2\times6}\]
+          Split 2 heads \((d_k=3)\):
+          \[Q_1 = Q[:,0:3] \in \mathbb{R}^{2\times3}\]
+          \[Q_2 = Q[:,3:6] \in \mathbb{R}^{2\times3}\]
+          Same split for \(K_1,K_2\) and \(V_1,V_2\).
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="cm">// project + add bias</span>
+<span class="kw">let mut</span> q = normed.<span class="fn">matmul</span>(<span class="op">&</span><span class="kw">self</span>.w_q);
+<span class="fn">add_bias</span>(<span class="op">&mut</span> q, <span class="op">&</span><span class="kw">self</span>.b_q);
+<span class="kw">let mut</span> k = normed.<span class="fn">matmul</span>(<span class="op">&</span><span class="kw">self</span>.w_k);
+<span class="fn">add_bias</span>(<span class="op">&mut</span> k, <span class="op">&</span><span class="kw">self</span>.b_k);
+<span class="kw">let mut</span> v = normed.<span class="fn">matmul</span>(<span class="op">&</span><span class="kw">self</span>.w_v);
+<span class="fn">add_bias</span>(<span class="op">&mut</span> v, <span class="op">&</span><span class="kw">self</span>.b_v);
+
+<span class="cm">// slice one head out of projection</span>
+<span class="kw">fn</span> <span class="fn">extract_head</span>(
+  m: <span class="op">&</span><span class="ty">Matrix</span>, h: <span class="ty">usize</span>, dk: <span class="ty">usize</span>
+) -> <span class="ty">Matrix</span> {
+  <span class="kw">let</span> s = h * dk;
+  <span class="kw">let mut</span> out = <span class="ty">Matrix</span>::<span class="fn">new</span>(m.rows, dk);
+  <span class="kw">for</span> i <span class="kw">in</span> <span class="nm">0</span>..m.rows {
+    <span class="kw">for</span> j <span class="kw">in</span> <span class="nm">0</span>..dk {
+      out.<span class="fn">set</span>(i, j, m.<span class="fn">get</span>(i, s+j));
+    }
+  }
+  out
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 3 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c3">3</div>
+      <div class="step-title">Scaled Dot-Product</div>
+      <span class="zk-badge zk-medium">ZK: Moderate</span>
+      <div class="step-shape">[s × d_k] → [s × s]</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          For each pair of tokens, we compute a <strong>compatibility score</strong>: how much should token i attend to token j? This is done by taking the dot product of query i with key j.<br><br>
+          The result is an [s×s] matrix where entry (i,j) captures affinity between tokens i and j. <strong>Dividing by √d_k</strong> scales down the scores — without this, large d_k causes dot products to grow huge and push softmax into near-zero gradients (saturation).<br><br>
+          In ZK, the scalar division requires a range-checked modular inverse, making it moderately expensive but manageable.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[\text{scores} = \frac{Q_i\, K_i^\top}{\sqrt{d_k}} \in \mathbb{R}^{s \times s}\]
+          <p class="note">Entry (i,j) measures how much token i should attend to token j. Pure matmul + scalar divide.</p>
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete (head 1)</div>
+        <div class="math-block">
+          Let \(Q_1 = K_1 = \begin{bmatrix}1&0&0\\0&1&0\end{bmatrix}\)
+          \[Q_1 K_1^\top = \begin{bmatrix}1&0\\0&1\end{bmatrix}\]
+          \[\text{scores}_1 = \frac{1}{\sqrt{3}}\begin{bmatrix}1&0\\0&1\end{bmatrix} = \begin{bmatrix}0.577&0\\0&0.577\end{bmatrix}\]
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="cm">// scale factor: 1 / sqrt(d_k)</span>
+<span class="kw">let</span> scale = (q.cols <span class="kw">as</span> <span class="ty">f32</span>).<span class="fn">sqrt</span>();
+
+<span class="cm">// QKᵀ → [seq × seq]</span>
+<span class="kw">let</span> kt = k.<span class="fn">transpose</span>();
+<span class="kw">let mut</span> scores = q.<span class="fn">matmul</span>(<span class="op">&</span>kt);
+
+<span class="cm">// divide every score by √d_k</span>
+<span class="kw">for</span> s <span class="kw">in</span> scores.data.<span class="fn">iter_mut</span>() {
+  <span class="st">*</span>s /= scale;
+}
+<span class="cm">// scores shape: [seq × seq]</span>
+<span class="cm">// e.g. for s=2: [[0.577, 0.0],</span>
+<span class="cm">//                [0.0,  0.577]]</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 4 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c4">4</div>
+      <div class="step-title">Softmax</div>
+      <span class="zk-badge zk-hard">ZK: Hard</span>
+      <div class="step-shape">[s × s] → [s × s]</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          The raw scores are converted into a <strong>probability distribution</strong> over tokens. For each query token (each row), softmax produces attention weights that sum to 1, expressing "how much of each value token to mix in".<br><br>
+          High scores become high weights; low scores get suppressed toward zero. This creates <strong>selective attention</strong> — a token can focus sharply on one or two others, or spread attention broadly.<br><br>
+          This is the <strong>primary ZK bottleneck</strong> in attention. The <code>exp()</code> function has no polynomial representation, so ZK systems must resort to lookup tables (e.g. tlookup in zkLLM) or expensive piecewise approximations.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[A_{ij} = \frac{e^{\text{scores}_{ij} - m_i}}{\sum_k e^{\text{scores}_{ik} - m_i}}\]
+          where \(m_i = \max_k \text{scores}_{ik}\)
+          <p class="note">Subtracting the row-max prevents overflow without changing output. Each row of A sums to 1. \(\exp()\) = primary ZK cost.</p>
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete (head 1)</div>
+        <div class="math-block">
+          \[\text{scores}_1 = \begin{bmatrix}0.577&0\\0&0.577\end{bmatrix}\]
+          Row 1: \(m=0.577\), then \(\frac{e^0}{e^0+e^{-0.577}} = 0.641\)
+          \[A_1 = \begin{bmatrix}0.641&0.359\\0.359&0.641\end{bmatrix}\]
+          <p class="note">Token 1 attends 64% to itself, 36% to token 2.</p>
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="kw">pub fn</span> <span class="fn">softmax_rows</span>(x: <span class="op">&mut</span> <span class="ty">Matrix</span>) {
+  <span class="kw">for</span> i <span class="kw">in</span> <span class="nm">0</span>..x.rows {
+    <span class="cm">// subtract max for stability</span>
+    <span class="kw">let</span> max = (<span class="nm">0</span>..x.cols)
+      .<span class="fn">map</span>(|j| x.<span class="fn">get</span>(i,j))
+      .<span class="fn">fold</span>(<span class="ty">f32</span>::NEG_INFINITY,
+            <span class="ty">f32</span>::max);
+    <span class="kw">let mut</span> sum = <span class="nm">0.0_f32</span>;
+    <span class="kw">for</span> j <span class="kw">in</span> <span class="nm">0</span>..x.cols {
+      <span class="kw">let</span> e = (x.<span class="fn">get</span>(i,j)-max).<span class="fn">exp</span>();
+      x.<span class="fn">set</span>(i, j, e);
+      sum += e;
+    }
+    <span class="kw">for</span> j <span class="kw">in</span> <span class="nm">0</span>..x.cols {
+      x.<span class="fn">set</span>(i, j,
+        x.<span class="fn">get</span>(i,j) / sum);
+    }
+  }
+}
+<span class="fn">softmax_rows</span>(<span class="op">&mut</span> scores);</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 5 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c5">5</div>
+      <div class="step-title">Weighted Sum</div>
+      <span class="zk-badge zk-easy">ZK: Easy</span>
+      <div class="step-shape">[s×s] × [s×d_k] → [s×d_k]</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          Using the attention weights from softmax, we <strong>mix the Value vectors</strong> of all tokens. For each query token, its output is a weighted average of all value vectors, where the weights were determined by how relevant each key was.<br><br>
+          This is where <strong>information actually flows</strong> between tokens. A token that attends strongly to another will pull in a lot of that other token's value representation.<br><br>
+          Pure matrix multiplication — no nonlinearities — so it is cheap and direct in ZK.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[\text{head}_i = A_i \cdot V_i\]
+          \[A_i \in \mathbb{R}^{s \times s},\quad V_i \in \mathbb{R}^{s \times d_k}\]
+          \[\Rightarrow \text{head}_i \in \mathbb{R}^{s \times d_k}\]
+          <p class="note">Row i of head_i is a convex combination of all rows of V_i.</p>
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete (head 1)</div>
+        <div class="math-block">
+          \(V_1 = \begin{bmatrix}1&0&1\\0&1&0\end{bmatrix}\)
+          \[\begin{bmatrix}0.641&0.359\\0.359&0.641\end{bmatrix}\begin{bmatrix}1&0&1\\0&1&0\end{bmatrix}\]
+          \[= \begin{bmatrix}0.641&0.359&0.641\\0.359&0.641&0.359\end{bmatrix}\]
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="cm">// scores is now attention matrix A</span>
+<span class="cm">// A [seq×seq] @ V [seq×d_head]</span>
+<span class="kw">let</span> head_out = scores.<span class="fn">matmul</span>(<span class="op">&</span>v_h);
+<span class="cm">// head_out: [seq × d_head]</span>
+
+<span class="cm">// All together in one function:</span>
+<span class="kw">fn</span> <span class="fn">scaled_dot_product</span>(
+  q: <span class="op">&</span><span class="ty">Matrix</span>, k: <span class="op">&</span><span class="ty">Matrix</span>, v: <span class="op">&</span><span class="ty">Matrix</span>
+) -> <span class="ty">Matrix</span> {
+  <span class="kw">let</span> scale=(q.cols <span class="kw">as</span> <span class="ty">f32</span>).<span class="fn">sqrt</span>();
+  <span class="kw">let mut</span> s = q.<span class="fn">matmul</span>(<span class="op">&</span>k.<span class="fn">transpose</span>());
+  <span class="kw">for</span> x <span class="kw">in</span> s.data.<span class="fn">iter_mut</span>() {
+    <span class="st">*</span>x /= scale;
+  }
+  <span class="fn">softmax_rows</span>(<span class="op">&mut</span> s);
+  s.<span class="fn">matmul</span>(v) <span class="cm">// ← weighted sum</span>
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 6 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c6">6</div>
+      <div class="step-title">Output Projection</div>
+      <span class="zk-badge zk-easy">ZK: Easy</span>
+      <div class="step-shape">[s × d] → [s × d]</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          The outputs from all h heads are <strong>concatenated</strong> back into a single [s×d] matrix, then <strong>linearly projected</strong> through W_O.<br><br>
+          The concatenation simply joins the per-head representations along the feature axis. The subsequent projection with W_O lets the network <strong>mix information across heads</strong> — it learns how to best combine the different "perspectives" each head has computed.<br><br>
+          Without this projection, multi-head attention would just be h independent single-head attentions with no cross-head communication.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[\text{concat} = [\text{head}_1 \,\|\, \cdots \,\|\, \text{head}_h] \in \mathbb{R}^{s \times d}\]
+          \[\text{attn\_out} = \text{concat}\cdot W_O + b_O\]
+          \[W_O \in \mathbb{R}^{d \times d},\quad b_O \in \mathbb{R}^d\]
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete</div>
+        <div class="math-block">
+          \[[\text{head}_1 \| \text{head}_2] \in \mathbb{R}^{2\times6}\]
+          \[= \begin{bmatrix}0.641&0.359&0.641&\cdots\\0.359&0.641&0.359&\cdots\end{bmatrix}\]
+          \[\xrightarrow{\times W_O + b_O} \in \mathbb{R}^{2\times6}\]
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="cm">// concatenate all heads</span>
+<span class="kw">let mut</span> concat=<span class="ty">Matrix</span>::<span class="fn">new</span>(seq,d_model);
+<span class="kw">for</span> h <span class="kw">in</span> <span class="nm">0</span>..n_heads {
+  <span class="kw">let</span> head = <span class="fn">scaled_dot_product</span>(
+    <span class="op">&</span><span class="fn">extract_head</span>(<span class="op">&</span>q,h,d_head),
+    <span class="op">&</span><span class="fn">extract_head</span>(<span class="op">&</span>k,h,d_head),
+    <span class="op">&</span><span class="fn">extract_head</span>(<span class="op">&</span>v,h,d_head),
+  );
+  <span class="kw">let</span> start = h * d_head;
+  <span class="kw">for</span> i <span class="kw">in</span> <span class="nm">0</span>..seq {
+    <span class="kw">for</span> j <span class="kw">in</span> <span class="nm">0</span>..d_head {
+      concat.<span class="fn">set</span>(i, start+j,
+        head.<span class="fn">get</span>(i,j));
+    }
+  }
+}
+<span class="cm">// output projection W_O</span>
+<span class="kw">let mut</span> out=concat.<span class="fn">matmul</span>(<span class="op">&</span>w_o);
+<span class="fn">add_bias</span>(<span class="op">&mut</span> out, <span class="op">&</span>b_o);</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 7 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c7">7</div>
+      <div class="step-title">Residual Addition (post-attention)</div>
+      <span class="zk-badge zk-easy">ZK: Easy</span>
+      <div class="step-shape">[s × d] → [s × d]</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          The original input <em>x</em> is <strong>added back</strong> to the attention output. This is the residual (skip) connection.<br><br>
+          Its purpose is twofold: it gives gradients a <strong>direct highway</strong> back through the network without going through attention, preventing vanishing gradients in deep stacks; and it lets the attention sublayer learn to compute a <strong>correction</strong> rather than a complete transformation — which is much easier to learn.<br><br>
+          Because the input and output are both [s×d], this is just elementwise addition — trivially cheap in ZK.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[x \leftarrow x + \text{attn\_out}\]
+          <p class="note">The residual path is unmodified. In pre-norm style, LayerNorm never touches the residual, keeping gradient flow clean throughout all N layers.</p>
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete</div>
+        <div class="math-block">
+          \[x_{\text{new}} = x_{\text{orig}} + \text{attn\_out}\]
+          \[\in \mathbb{R}^{2\times6}\]
+          Each element: \(x[i,j] += \text{attn\_out}[i,j]\)
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="cm">// add_inplace: self += rhs</span>
+<span class="kw">pub fn</span> <span class="fn">add_inplace</span>(
+  <span class="op">&mut</span> <span class="kw">self</span>, rhs: <span class="op">&</span><span class="ty">Matrix</span>
+) {
+  assert_eq!(<span class="kw">self</span>.data.<span class="fn">len</span>(),
+             rhs.data.<span class="fn">len</span>());
+  <span class="kw">for</span> (a, b) <span class="kw">in</span> <span class="kw">self</span>.data.<span class="fn">iter_mut</span>()
+    .<span class="fn">zip</span>(rhs.data.<span class="fn">iter</span>()) {
+    <span class="st">*</span>a += b;
+  }
+}
+
+<span class="cm">// In block forward():</span>
+<span class="kw">let mut</span> x = input.<span class="fn">clone</span>();
+<span class="kw">let</span> attn = <span class="kw">self</span>.attn.<span class="fn">forward</span>(
+  <span class="op">&</span><span class="kw">self</span>.norm1.<span class="fn">forward</span>(<span class="op">&</span>x));
+x.<span class="fn">add_inplace</span>(<span class="op">&</span>attn); <span class="cm">// ← here</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ FFN ════════════════════════════════ -->
+  <div class="section-label">Feed-Forward Network</div>
+
+  <!-- ── Step 8 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c8">8</div>
+      <div class="step-title">LayerNorm (second)</div>
+      <span class="zk-badge zk-hard">ZK: Hard</span>
+      <div class="step-shape">[s × d] → [s × d]</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          A <strong>second independent LayerNorm</strong> is applied before the feed-forward network. The post-attention activations may have a different distribution than before attention (due to the residual addition), so renormalizing stabilizes the FFN input.<br><br>
+          It uses its own separate learned parameters <strong>γ₂ and β₂</strong>, independent of the first LayerNorm. This gives the model flexibility to set different operating scales for the attention sublayer vs the FFN sublayer.<br><br>
+          Same ZK cost as step 1: variance and square root are non-polynomial.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[x' = \gamma_2 \odot \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} + \beta_2\]
+          <p class="note">Identical formula to step 1. Fresh learned \(\gamma_2, \beta_2\). Applied to the post-residual \(x\) feeding into the FFN.</p>
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete</div>
+        <div class="math-block">
+          Applied row-wise to updated \(x \in \mathbb{R}^{2\times6}\):
+          \[\mu_1 = \text{mean}(x_1),\quad \sigma_1 = \text{std}(x_1)\]
+          \[x'_1 = \frac{x_1 - \mu_1}{\sigma_1}\]
+          Output: \([2\times6]\). Feeds into FFN.
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="cm">// Block holds two separate norms</span>
+<span class="kw">pub struct</span> <span class="ty">TransformerBlock</span> {
+  <span class="kw">pub</span> norm1: <span class="ty">LayerNorm</span>, <span class="cm">// step 1</span>
+  <span class="kw">pub</span> attn:  <span class="ty">MultiHeadAttention</span>,
+  <span class="kw">pub</span> norm2: <span class="ty">LayerNorm</span>, <span class="cm">// step 8</span>
+  <span class="kw">pub</span> ffn:   <span class="ty">FeedForward</span>,
+}
+
+<span class="cm">// norm2 called before FFN:</span>
+<span class="kw">let</span> normed2 = <span class="kw">self</span>.norm2
+  .<span class="fn">forward</span>(<span class="op">&</span>x);
+<span class="cm">// norm2.gamma and norm2.beta are</span>
+<span class="cm">// completely independent of norm1</span>
+<span class="cm">// — separate learned parameters</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 9 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c9">9</div>
+      <div class="step-title">First Linear Layer (Expand)</div>
+      <span class="zk-badge zk-easy">ZK: Easy</span>
+      <div class="step-shape">[s × d] → [s × d_ff]</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          The FFN first <strong>expands</strong> the representation into a higher-dimensional space, typically 4× wider. This gives the network a larger "working space" to compute nonlinear transformations of each token's representation.<br><br>
+          Crucially, the FFN operates on <strong>each token independently</strong> — unlike attention, there is no mixing across the sequence dimension here. Each row of the input is transformed in isolation by the same weights.<br><br>
+          This is often described as providing the model's <strong>"memory"</strong> — the key-value pairs in the FFN weights store factual associations learned during training.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[h = x' W_1 + b_1\]
+          \[W_1 \in \mathbb{R}^{d \times d_{ff}},\quad b_1 \in \mathbb{R}^{d_{ff}}\]
+          <p class="note">\(d_{ff}=4d\) typically. LLaMA uses \({\approx}2.67d\) with SwiGLU gating (which adds a third W matrix).</p>
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete</div>
+        <div class="math-block">
+          \[x' \in \mathbb{R}^{2\times6} \xrightarrow{\times W_1} h \in \mathbb{R}^{2\times12}\]
+          \[W_1 \in \mathbb{R}^{6\times12},\quad b_1 \in \mathbb{R}^{12}\]
+          Expansion: \(d=6 \to d_{ff}=12\).
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="kw">pub struct</span> <span class="ty">FeedForward</span> {
+  <span class="kw">pub</span> w1: <span class="ty">Matrix</span>, <span class="cm">// [d × d_ff]</span>
+  <span class="kw">pub</span> b1: <span class="ty">Vec</span><<span class="ty">f32</span>>,
+  <span class="kw">pub</span> w2: <span class="ty">Matrix</span>, <span class="cm">// [d_ff × d]</span>
+  <span class="kw">pub</span> b2: <span class="ty">Vec</span><<span class="ty">f32</span>>,
+}
+
+<span class="kw">pub fn</span> <span class="fn">forward</span>(
+  <span class="op">&</span><span class="kw">self</span>, x: <span class="op">&</span><span class="ty">Matrix</span>
+) -> <span class="ty">Matrix</span> {
+  <span class="cm">// step 9: expand</span>
+  <span class="kw">let mut</span> h = x.<span class="fn">matmul</span>(<span class="op">&</span><span class="kw">self</span>.w1);
+  <span class="fn">add_bias</span>(<span class="op">&mut</span> h, <span class="op">&</span><span class="kw">self</span>.b1);
+  <span class="cm">// h: [seq × d_ff]</span>
+  <span class="cm">// ... activation + contract below</span>
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 10 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c10">10</div>
+      <div class="step-title">Activation Function</div>
+      <span class="zk-badge zk-hard">ZK: Hard</span>
+      <div class="step-shape">[s × d_ff] → [s × d_ff]</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          A <strong>nonlinear activation</strong> is applied elementwise to the expanded representation. Without this, two stacked linear layers would collapse to a single linear layer — the nonlinearity is what gives the FFN its expressive power.<br><br>
+          <strong>ReLU</strong> simply zeroes out negative values — fast and simple, but creates "dead neurons". <strong>GELU</strong> and <strong>SiLU</strong> are smooth approximations that outperform ReLU empirically by allowing small negative outputs and smoother gradients.<br><br>
+          For ZK, ReLU is cheapest (one comparison). GELU/SiLU both contain <code>exp()</code> and require lookup tables or polynomial approximations in circuits, making them <strong>the second major ZK bottleneck</strong> after softmax.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[\text{ReLU}(x) = \max(0, x)\]
+          \[\text{GELU}(x) \approx x \cdot \sigma(1.702x)\]
+          \[\text{SiLU}(x) = x \cdot \sigma(x)\]
+          \[\text{SwiGLU}(x) = (xW_1)\odot\text{SiLU}(xW_3)\]
+          <p class="note">All applied elementwise. GELU/SiLU contain exp() — expensive in ZK. ReLU = single comparison.</p>
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete (GELU)</div>
+        <div class="math-block">
+          For element \(h_{ij}=0.5\):
+          \[\sigma(1.702 \times 0.5) = \sigma(0.851) = 0.701\]
+          \[\text{GELU}(0.5) = 0.5 \times 0.701 = 0.350\]
+          For \(h_{ij}=-1.0\):
+          \[\text{GELU}(-1.0) \approx -0.159\]
+          Applied to all 24 elements of \([2\times12]\).
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="cm">// Three common activations:</span>
+<span class="kw">fn</span> <span class="fn">relu</span>(x: <span class="ty">f32</span>) -> <span class="ty">f32</span> {
+  x.<span class="fn">max</span>(<span class="nm">0.0</span>)              <span class="cm">// ZK-cheapest</span>
+}
+<span class="kw">fn</span> <span class="fn">gelu</span>(x: <span class="ty">f32</span>) -> <span class="ty">f32</span> {
+  <span class="cm">// fast sigmoid approximation</span>
+  x * (<span class="nm">1.0</span> / (
+    <span class="nm">1.0</span> + (<span class="nm">-1.702</span> * x).<span class="fn">exp</span>()))
+}
+<span class="kw">fn</span> <span class="fn">silu</span>(x: <span class="ty">f32</span>) -> <span class="ty">f32</span> {
+  x / (<span class="nm">1.0</span> + (-x).<span class="fn">exp</span>())
+}
+
+<span class="cm">// apply elementwise to h:</span>
+<span class="kw">for</span> v <span class="kw">in</span> h.data.<span class="fn">iter_mut</span>() {
+  <span class="st">*</span>v = <span class="fn">gelu</span>(<span class="st">*</span>v);
+}
+<span class="cm">// h still [seq × d_ff]</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 11 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c11">11</div>
+      <div class="step-title">Second Linear Layer (Contract)</div>
+      <span class="zk-badge zk-easy">ZK: Easy</span>
+      <div class="step-shape">[s × d_ff] → [s × d]</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          After the nonlinear transformation in the expanded space, a second linear layer <strong>projects back down</strong> to the original model dimension d.<br><br>
+          Together, steps 9–11 form a classic <strong>bottleneck-expand-contract</strong> pattern (though here it's expand-activate-contract). The network nonlinearly transforms each token's representation and then compresses the result back to a compatible shape for the residual connection.<br><br>
+          Pure matmul — no nonlinearity — so straightforward in ZK.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[\text{ffn\_out} = h\, W_2 + b_2\]
+          \[W_2 \in \mathbb{R}^{d_{ff} \times d},\quad b_2 \in \mathbb{R}^d\]
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete</div>
+        <div class="math-block">
+          \[h \in \mathbb{R}^{2\times12} \xrightarrow{\times W_2} \text{ffn\_out} \in \mathbb{R}^{2\times6}\]
+          \[W_2 \in \mathbb{R}^{12\times6},\quad b_2 \in \mathbb{R}^{6}\]
+          Contraction: \(d_{ff}=12 \to d=6\).
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="cm">// Full FeedForward::forward():</span>
+<span class="kw">pub fn</span> <span class="fn">forward</span>(
+  <span class="op">&</span><span class="kw">self</span>, x: <span class="op">&</span><span class="ty">Matrix</span>
+) -> <span class="ty">Matrix</span> {
+  <span class="cm">// expand [s×d] → [s×d_ff]</span>
+  <span class="kw">let mut</span> h=x.<span class="fn">matmul</span>(<span class="op">&</span><span class="kw">self</span>.w1);
+  <span class="fn">add_bias</span>(<span class="op">&mut</span> h,<span class="op">&</span><span class="kw">self</span>.b1);
+  <span class="cm">// activate</span>
+  <span class="kw">for</span> v <span class="kw">in</span> h.data.<span class="fn">iter_mut</span>() {
+    <span class="st">*</span>v = <span class="fn">gelu</span>(<span class="st">*</span>v);
+  }
+  <span class="cm">// contract [s×d_ff] → [s×d]</span>
+  <span class="kw">let mut</span> out=h.<span class="fn">matmul</span>(<span class="op">&</span><span class="kw">self</span>.w2);
+  <span class="fn">add_bias</span>(<span class="op">&mut</span> out,<span class="op">&</span><span class="kw">self</span>.b2);
+  out
+}</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Step 12 ── -->
+  <div class="step">
+    <div class="step-header">
+      <div class="step-num c12">12</div>
+      <div class="step-title">Residual Addition (post-FFN)</div>
+      <span class="zk-badge zk-easy">ZK: Easy</span>
+      <div class="step-shape">[s × d] → [s × d]</div>
+    </div>
+    <div class="step-body">
+      <div class="col col-explain">
+        <div class="col-label">What it does</div>
+        <div class="explain-text">
+          A second residual connection <strong>adds the FFN output back</strong> to the post-attention x. Same motivation as step 7: clean gradient flow and learning corrections rather than full transformations.<br><br>
+          After this step, the block output has the <strong>exact same shape</strong> as the block input — [s×d]. This is what makes transformer blocks <strong>stackable</strong>: the output of block N feeds directly into block N+1 with no shape change.<br><br>
+          In a full model, this block repeats N times (e.g. 32 times in LLaMA-7B), each with its own independent set of weights.
+        </div>
+      </div>
+      <div class="col col-generic">
+        <div class="col-label">Generic</div>
+        <div class="math-block">
+          \[x \leftarrow x + \text{ffn\_out}\]
+          <p class="note">Block is shape-preserving: [s×d] in, [s×d] out. Stack N blocks to build a full transformer. Each block has its own W_Q, W_K, W_V, W_O, W_1, W_2, γ₁, β₁, γ₂, β₂.</p>
+        </div>
+      </div>
+      <div class="col col-concrete">
+        <div class="col-label">Concrete</div>
+        <div class="math-block">
+          \[x_{\text{out}} = x_{\text{post-attn}} + \text{ffn\_out}\]
+          \[\in \mathbb{R}^{2\times6}\]
+          Shape preserved end-to-end: \([2\times6]\to[2\times6]\).
+        </div>
+      </div>
+      <div class="col col-rust">
+        <div class="col-label">Rust</div>
+<pre><span class="cm">// Full block forward (pre-norm):</span>
+<span class="kw">pub fn</span> <span class="fn">forward</span>(
+  <span class="op">&</span><span class="kw">self</span>, x: <span class="op">&</span><span class="ty">Matrix</span>
+) -> <span class="ty">Matrix</span> {
+  <span class="kw">let mut</span> out = x.<span class="fn">clone</span>();
+
+  <span class="cm">// attention sub-block</span>
+  <span class="kw">let</span> a = <span class="kw">self</span>.attn.<span class="fn">forward</span>(
+    <span class="op">&</span><span class="kw">self</span>.norm1.<span class="fn">forward</span>(x));
+  out.<span class="fn">add_inplace</span>(<span class="op">&</span>a); <span class="cm">// step 7</span>
+
+  <span class="cm">// FFN sub-block</span>
+  <span class="kw">let</span> f = <span class="kw">self</span>.ffn.<span class="fn">forward</span>(
+    <span class="op">&</span><span class="kw">self</span>.norm2.<span class="fn">forward</span>(<span class="op">&</span>out));
+  out.<span class="fn">add_inplace</span>(<span class="op">&</span>f); <span class="cm">// step 12</span>
+  out
+}
+<span class="cm">// output shape = input shape ✓</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shape flow table -->
+  <div class="section-label">Shape Flow Summary</div>
+  <div class="step" style="overflow:auto">
+    <table class="shape-table">
+      <thead>
+        <tr><th>Step</th><th>Operation</th><th>Input Shape</th><th>Output Shape</th><th>ZK Cost</th><th>Reason</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>LayerNorm</td><td><code>[2×6]</code></td><td><code>[2×6]</code></td><td>🔴 Hard</td><td>variance + sqrt non-polynomial</td></tr>
+        <tr><td>2</td><td>Q, K, V projections</td><td><code>[2×6]</code></td><td><code>[2×6]</code> → <code>[2×3]</code>/head</td><td>✅ Easy</td><td>pure matmul</td></tr>
+        <tr><td>3</td><td>Scaled dot-product</td><td><code>[2×3]</code></td><td><code>[2×2]</code></td><td>🟡 Moderate</td><td>scalar division needs range-checked inverse</td></tr>
+        <tr><td>4</td><td>Softmax</td><td><code>[2×2]</code></td><td><code>[2×2]</code></td><td>🔴 Hard</td><td>exp() has no polynomial form</td></tr>
+        <tr><td>5</td><td>Weighted sum</td><td><code>[2×2]</code> × <code>[2×3]</code></td><td><code>[2×3]</code>/head</td><td>✅ Easy</td><td>pure matmul</td></tr>
+        <tr><td>6</td><td>Output projection</td><td><code>[2×6]</code></td><td><code>[2×6]</code></td><td>✅ Easy</td><td>pure matmul</td></tr>
+        <tr><td>7</td><td>Residual add</td><td><code>[2×6]</code></td><td><code>[2×6]</code></td><td>✅ Easy</td><td>elementwise addition</td></tr>
+        <tr><td>8</td><td>LayerNorm (second)</td><td><code>[2×6]</code></td><td><code>[2×6]</code></td><td>🔴 Hard</td><td>variance + sqrt non-polynomial</td></tr>
+        <tr><td>9</td><td>FFN expand</td><td><code>[2×6]</code></td><td><code>[2×12]</code></td><td>✅ Easy</td><td>pure matmul</td></tr>
+        <tr><td>10</td><td>Activation (GELU)</td><td><code>[2×12]</code></td><td><code>[2×12]</code></td><td>🔴 Hard</td><td>exp() in GELU/SiLU; ReLU is moderate</td></tr>
+        <tr><td>11</td><td>FFN contract</td><td><code>[2×12]</code></td><td><code>[2×6]</code></td><td>✅ Easy</td><td>pure matmul</td></tr>
+        <tr><td>12</td><td>Residual add</td><td><code>[2×6]</code></td><td><code>[2×6]</code></td><td>✅ Easy</td><td>elementwise addition</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</body>
+</html>

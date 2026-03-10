@@ -1,0 +1,8 @@
+[package]
+name = "simple_zkml"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ndarray = { version = "0.17.2", features = ["rayon"] }
+thiserror = "2.0.18"
