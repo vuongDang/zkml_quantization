@@ -22,15 +22,86 @@ use std::{
     f32,
     ops::{Div, Sub},
 };
+
+pub struct TransformerBlock {
+    normalization_1: NormalizationLayer,
+    attention: AttentionLayer,
+    normalization_2: NormalizationLayer,
+    linear_1: LinearLayer,
+    activation: ActivationFunction,
+    linear_2: LinearLayer,
+}
+
+impl TransformerBlock {
+    pub fn new(
+        normalization_1: NormalizationLayer,
+        attention: AttentionLayer,
+        normalization_2: NormalizationLayer,
+        linear_1: LinearLayer,
+        linear_2: LinearLayer,
+        activation: ActivationFunction,
+    ) -> Self {
+        TransformerBlock {
+            normalization_1,
+            attention,
+            normalization_2,
+            linear_1,
+            activation,
+            linear_2,
+        }
+    }
+
+    pub fn run(&self, input: Matrix) -> Result<Matrix, TransformerError> {
+        // Attention Block
+        // Normalization
+        let out = self.normalization_1.run(input.clone())?;
+        // Linear projections and split into heads
+        let (queries, keys, values) = self.attention.linear_projections_and_heads(out);
+        // Parallel processing of heads
+        let mut heads = vec![];
+        for (q, (k, v)) in queries
+            .into_iter()
+            .zip(keys.into_iter().zip(values.into_iter()))
+        {
+            // Scaled dot products
+            let score = self.attention.scaled_dot_product(q, k);
+            // softmax
+            let softmax_score = softmax(score);
+            // Linear layer with values
+            let out = softmax_score.dot(&v);
+            heads.push(out);
+        }
+        // Output projection
+        let attention_out = self.attention.output_projection(heads);
+
+        // Residual Addition
+        let post_attention_out = input + attention_out;
+
+        // Feed-forward Block
+        // Normalization
+        let out = self.normalization_2.run(post_attention_out.clone())?;
+        // LineaLayer
+        let mut out = self.linear_1.run(out);
+        // Activation Layer
+        out.mapv_inplace(|elem| self.activation.run(elem));
+        // LineaLayer
+        let out = self.linear_2.run(out);
+
+        // Residual Addition
+        let final_out = post_attention_out + out;
+        Ok(final_out)
+    }
+}
+
 use thiserror::Error;
 
-pub struct LayerNormalization {
+pub struct NormalizationLayer {
     pub beta: Array1<f32>,
     pub gamma: Array1<f32>,
     pub epsilon: f32,
 }
 
-impl LayerNormalization {
+impl NormalizationLayer {
     pub fn run(&self, input: Matrix) -> Result<Matrix, TransformerError> {
         let mut output = Matrix::zeros(input.raw_dim());
         for (i, row) in input.axis_iter(Axis(0)).enumerate() {
@@ -57,8 +128,9 @@ impl LayerNormalization {
 
 // Inputs are sequence lengths 2 and dimensions 3
 #[derive(Default)]
-pub struct AttentionBlock {
+pub struct AttentionLayer {
     pub dimension: usize,
+    pub nb_heads: usize,
 
     // Query, Key and Value weights and biases
     pub w_q: Matrix,
@@ -69,11 +141,10 @@ pub struct AttentionBlock {
     pub b_v: f32,
     pub w_o: Matrix,
     pub b_o: Array1<f32>,
-    pub nb_heads: usize,
 }
 
 use TransformerError::*;
-impl AttentionBlock {
+impl AttentionLayer {
     pub fn linear_projections_and_heads(
         &self,
         input: Matrix,
@@ -134,6 +205,22 @@ impl LinearLayer {
     }
 }
 
+pub enum ActivationFunction {
+    GELU,
+    ReLU,
+    SiLU,
+}
+
+impl ActivationFunction {
+    pub fn run(&self, input: f32) -> f32 {
+        match self {
+            ActivationFunction::GELU => input / (1.0 + (-1.702 * input).exp()),
+            ActivationFunction::ReLU => todo!(),
+            ActivationFunction::SiLU => input / (1.0 + (-input).exp()),
+        }
+    }
+}
+
 pub fn gelu(x: f32) -> f32 {
     x / (1.0 + (-1.702 * x).exp())
 }
@@ -151,7 +238,7 @@ pub enum TransformerError {
 #[cfg(test)]
 mod tests {
     use crate::transformer_block::{
-        AttentionBlock, LayerNormalization, LinearLayer, Matrix, softmax,
+        AttentionLayer, LinearLayer, Matrix, NormalizationLayer, softmax,
     };
     use ndarray::{Array1, Array2, array};
 
@@ -162,7 +249,7 @@ mod tests {
             [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         ];
 
-        let layer_norm = LayerNormalization {
+        let layer_norm = NormalizationLayer {
             beta: array![0.0, 0.0],
             gamma: array![1.0, 1.0],
             epsilon: 1e-5,
@@ -179,7 +266,7 @@ mod tests {
     #[test]
     fn linear_proj_and_heads_simple() {
         let x_in = array![[0.1, 0.2, 0.3, 0.4], [0.0, 0.0, 0.0, 0.0]];
-        let mut attention = AttentionBlock::default();
+        let mut attention = AttentionLayer::default();
         attention.dimension = 4;
         attention.nb_heads = 2;
         attention.w_q = Array2::eye(4);
@@ -210,7 +297,7 @@ mod tests {
 
     #[test]
     fn scaled_dot_product_simple() {
-        let mut attention = AttentionBlock::default();
+        let mut attention = AttentionLayer::default();
         attention.dimension = 6;
         attention.nb_heads = 2;
         let query = array![[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
@@ -234,7 +321,7 @@ mod tests {
 
     #[test]
     fn output_projection_simple() {
-        let mut attention = AttentionBlock::default();
+        let mut attention = AttentionLayer::default();
         attention.w_o = Array2::eye(4);
         attention.b_o = array![0.1, 0.2, 0.3, 0.4];
 

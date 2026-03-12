@@ -1,15 +1,18 @@
 use ndarray::prelude::*;
 
-use crate::transformer_block::{AttentionBlock, LayerNormalization, LinearLayer, silu, softmax};
+use crate::transformer_block::{
+    ActivationFunction, AttentionLayer, LinearLayer, NormalizationLayer, TransformerBlock, silu,
+    softmax,
+};
 pub mod transformer_block;
 
 fn main() {
-    let layer_norm1 = LayerNormalization {
+    let layer_norm1 = NormalizationLayer {
         beta: Array1::zeros(4),
         gamma: Array1::zeros(4),
         epsilon: 1e-5,
     };
-    let attention_block = AttentionBlock {
+    let attention_block = AttentionLayer {
         dimension: 4,
         w_q: Array2::eye(4),
         w_k: Array2::eye(4),
@@ -21,56 +24,32 @@ fn main() {
         b_o: array![0.0, 0.0, 0.0, 0.0],
         nb_heads: 2,
     };
-    let layer_norm2 = LayerNormalization {
+    let layer_norm2 = NormalizationLayer {
         beta: Array1::zeros(4),
         gamma: Array1::zeros(4),
         epsilon: 1e-5,
     };
 
-    let input = array![[1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0]];
-    // Attention Block
-    // Normalization
-    let out = layer_norm1.run(input.clone()).unwrap();
-    // Linear projections and split into heads
-    let (queries, keys, values) = attention_block.linear_projections_and_heads(out);
-    // Parallel processing of heads
-    let mut heads = vec![];
-    for (q, (k, v)) in queries
-        .into_iter()
-        .zip(keys.into_iter().zip(values.into_iter()))
-    {
-        // Scaled dot products
-        let score = attention_block.scaled_dot_product(q, k);
-        // softmax
-        let softmax_score = softmax(score);
-        // Linear layer with values
-        let out = softmax_score.dot(&v);
-        heads.push(out);
-    }
-    // Output projection
-    let attention_out = attention_block.output_projection(heads);
-
-    // Residual Addition
-    let post_attention_out = input + attention_out;
-
-    // Feed-forward Block
-    // Normalization
-    let out = layer_norm2.run(post_attention_out.clone()).unwrap();
-    // LineaLayer
-    let mut out = LinearLayer {
+    let linear_1 = LinearLayer {
         w: Array2::ones((4, 6)),
         b: Array1::ones(6),
-    }
-    .run(out);
-    // Activation Layer
-    out.mapv_inplace(|elem| silu(elem));
-    // LineaLayer
-    let out = LinearLayer {
+    };
+
+    let linear_2 = LinearLayer {
         w: Array2::ones((4, 2)),
         b: Array1::ones(2),
-    }
-    .run(out);
+    };
+    let activation = ActivationFunction::GELU;
 
-    // Residual Addition
-    let final_out = post_attention_out + out;
+    let block = TransformerBlock::new(
+        layer_norm1,
+        attention_block,
+        layer_norm2,
+        linear_1,
+        linear_2,
+        activation,
+    );
+    let input = array![[1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 0.0]];
+
+    let _ = block.run(input);
 }
