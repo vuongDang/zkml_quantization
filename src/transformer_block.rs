@@ -1,6 +1,4 @@
-//! Steps in a transformer block
-//!
-//! Attention
+//! AttentionSiLU
 //!     1. LayerNorm
 //!     2. Linear projections → Q, K, V matrices
 //!     3. Scaled dot-product → QKᵀ / √d_k
@@ -18,11 +16,15 @@
 type Matrix = Array2<f32>;
 
 use ndarray::{Array1, Array2, Axis, concatenate, s};
+use ndarray_rand::RandomExt;
+use rand::{Rng, distr::Uniform};
+use serde::{Deserialize, Serialize};
 use std::{
     f32,
     ops::{Div, Sub},
 };
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TransformerBlock {
     normalization_1: NormalizationLayer,
     attention: AttentionLayer,
@@ -54,9 +56,10 @@ impl TransformerBlock {
     pub fn run(&self, input: Matrix) -> Result<Matrix, TransformerError> {
         // Attention Block
         // Normalization
-        let out = self.normalization_1.run(input.clone())?;
+        let norm1_out = self.normalization_1.run(input.clone())?;
+        // println!("norm1_out: {:?}", &norm1_out);
         // Linear projections and split into heads
-        let (queries, keys, values) = self.attention.linear_projections_and_heads(out);
+        let (queries, keys, values) = self.attention.linear_projections_and_heads(norm1_out);
         // Parallel processing of heads
         let mut heads = vec![];
         for (q, (k, v)) in queries
@@ -73,28 +76,48 @@ impl TransformerBlock {
         }
         // Output projection
         let attention_out = self.attention.output_projection(heads);
+        // println!("attn_out: {:?}", &attention_out);
 
         // Residual Addition
-        let post_attention_out = input + attention_out;
+        let residual1_out = input + attention_out;
+        // println!("residual1: {:?}", &residual1_out);
 
         // Feed-forward Block
         // Normalization
-        let out = self.normalization_2.run(post_attention_out.clone())?;
-        // LineaLayer
-        let mut out = self.linear_1.run(out);
+        let norm2_out = self.normalization_2.run(residual1_out.clone())?;
+        // println!("norm2: {:?}", &norm2_out);
+        // LinearLayer
+        let mut lin1_out = self.linear_1.run(norm2_out);
+        // println!("lin1: {:?}", &lin1_out);
         // Activation Layer
-        out.mapv_inplace(|elem| self.activation.run(elem));
-        // LineaLayer
-        let out = self.linear_2.run(out);
+        lin1_out.mapv_inplace(|elem| self.activation.run(elem));
+        // println!("activation: {:?}", &lin1_out);
+        // LinearLayer
+        let lin2_out = self.linear_2.run(lin1_out);
+        // println!("lin2: {:?}", &lin2_out);
 
         // Residual Addition
-        let final_out = post_attention_out + out;
+        let final_out = residual1_out + lin2_out;
+        // println!("final: {:?}", &final_out);
+
         Ok(final_out)
+    }
+
+    pub fn random(d_model: usize, nb_heads: usize, d_ffn: usize) -> Self {
+        TransformerBlock {
+            normalization_1: NormalizationLayer::random(d_model),
+            attention: AttentionLayer::random(d_model, nb_heads),
+            normalization_2: NormalizationLayer::random(d_model),
+            linear_1: LinearLayer::random(d_model, d_ffn),
+            activation: ActivationFunction::random(),
+            linear_2: LinearLayer::random(d_ffn, d_model),
+        }
     }
 }
 
 use thiserror::Error;
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NormalizationLayer {
     pub beta: Array1<f32>,
     pub gamma: Array1<f32>,
@@ -105,40 +128,40 @@ impl NormalizationLayer {
     pub fn run(&self, input: Matrix) -> Result<Matrix, TransformerError> {
         let mut output = Matrix::zeros(input.raw_dim());
         for (i, row) in input.axis_iter(Axis(0)).enumerate() {
-            let g_i = self
-                .gamma
-                .get(i)
-                .ok_or(InvalidDimension("gamma is too small".to_string()))?;
-            let b_i = self
-                .beta
-                .get(i)
-                .ok_or(InvalidDimension("beta is too small".to_string()))?;
             let variance = row.var(0.0);
             let mean = row
                 .mean()
                 .ok_or(InvalidDimension("Row is empty".to_string()))?;
             let std_deviation = (variance + self.epsilon).sqrt();
-            let res = ((row.sub(mean)).div(std_deviation)) * (*g_i) + (*b_i);
+            let res = ((row.sub(mean)).div(std_deviation)) * (&self.gamma) + (&self.beta);
             output.row_mut(i).assign(&res);
         }
 
         Ok(output)
     }
+
+    pub fn random(size: usize) -> Self {
+        NormalizationLayer {
+            gamma: Array1::random(size, Uniform::new(0.0, 1.0).unwrap()),
+            beta: Array1::random(size, Uniform::new(0.0, 1.0).unwrap()),
+            epsilon: 1e-5,
+        }
+    }
 }
 
 // Inputs are sequence lengths 2 and dimensions 3
-#[derive(Default)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct AttentionLayer {
     pub dimension: usize,
     pub nb_heads: usize,
 
     // Query, Key and Value weights and biases
     pub w_q: Matrix,
-    pub b_q: f32,
+    pub b_q: Array1<f32>,
     pub w_k: Matrix,
-    pub b_k: f32,
+    pub b_k: Array1<f32>,
     pub w_v: Matrix,
-    pub b_v: f32,
+    pub b_v: Array1<f32>,
     pub w_o: Matrix,
     pub b_o: Array1<f32>,
 }
@@ -150,9 +173,9 @@ impl AttentionLayer {
         input: Matrix,
     ) -> (Vec<Matrix>, Vec<Matrix>, Vec<Matrix>) {
         // Step1: Linear projections
-        let query = input.dot(&self.w_q) + self.b_q;
-        let key = input.dot(&self.w_k) + self.b_k;
-        let value = input.dot(&self.w_v) + self.b_v;
+        let query = input.dot(&self.w_q.t()) + &self.b_q;
+        let key = input.dot(&self.w_k.t()) + &self.b_k;
+        let value = input.dot(&self.w_v.t()) + &self.b_v;
 
         let query_heads: Vec<Matrix> = self.get_heads(query);
         let key_heads: Vec<Matrix> = self.get_heads(key);
@@ -178,9 +201,24 @@ impl AttentionLayer {
 
     pub fn output_projection(&self, heads: Vec<Matrix>) -> Matrix {
         let views: Vec<_> = heads.iter().map(|head| head.view()).collect();
-        dbg!(&views);
         let concat_heads = concatenate(Axis(1), &views).expect("Heads have mismatching shapes");
-        concat_heads.dot(&self.w_o) + &self.b_o
+        concat_heads.dot(&self.w_o.t()) + &self.b_o
+    }
+
+    pub fn random(dimension: usize, nb_heads: usize) -> Self {
+        let dist = Uniform::new(-1.0, 1.0).unwrap();
+        AttentionLayer {
+            dimension,
+            nb_heads,
+            w_q: Array2::random((dimension, dimension), dist),
+            b_q: Array1::random(dimension, dist),
+            w_k: Array2::random((dimension, dimension), dist),
+            b_k: Array1::random(dimension, dist),
+            w_v: Array2::random((dimension, dimension), dist),
+            b_v: Array1::random(dimension, dist),
+            w_o: Array2::random((dimension, dimension), dist),
+            b_o: Array1::random(dimension, dist),
+        }
     }
 }
 
@@ -194,6 +232,7 @@ pub fn softmax(input: Matrix) -> Matrix {
     output
 }
 
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct LinearLayer {
     pub w: Matrix,
     pub b: Array1<f32>,
@@ -201,10 +240,19 @@ pub struct LinearLayer {
 
 impl LinearLayer {
     pub fn run(&self, input: Matrix) -> Matrix {
-        input.dot(&self.w) + &self.b
+        input.dot(&self.w.t()) + &self.b
+    }
+
+    pub fn random(in_dim: usize, out_dim: usize) -> Self {
+        let dist = Uniform::new(-1.0, 1.0).unwrap();
+        LinearLayer {
+            w: Array2::random((out_dim, in_dim), dist),
+            b: Array1::random(out_dim, dist),
+        }
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ActivationFunction {
     GELU,
     ReLU,
@@ -214,19 +262,27 @@ pub enum ActivationFunction {
 impl ActivationFunction {
     pub fn run(&self, input: f32) -> f32 {
         match self {
-            ActivationFunction::GELU => input / (1.0 + (-1.702 * input).exp()),
-            ActivationFunction::ReLU => todo!(),
+            ActivationFunction::GELU => {
+                0.5 * input * (1.0 + libm::erff(input / std::f32::consts::SQRT_2))
+            }
+            ActivationFunction::ReLU => {
+                if input < 0.0 {
+                    0.0
+                } else {
+                    input
+                }
+            }
             ActivationFunction::SiLU => input / (1.0 + (-input).exp()),
         }
     }
-}
 
-pub fn gelu(x: f32) -> f32 {
-    x / (1.0 + (-1.702 * x).exp())
-}
-
-pub fn silu(x: f32) -> f32 {
-    x / (1.0 + (-x).exp())
+    pub fn random() -> Self {
+        match rand::rng().random_range(0..3) {
+            0 => ActivationFunction::GELU,
+            1 => ActivationFunction::ReLU,
+            _ => ActivationFunction::SiLU,
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -250,8 +306,8 @@ mod tests {
         ];
 
         let layer_norm = NormalizationLayer {
-            beta: array![0.0, 0.0],
-            gamma: array![1.0, 1.0],
+            gamma: Array1::ones(6),
+            beta: Array1::zeros(6),
             epsilon: 1e-5,
         };
 
@@ -272,7 +328,7 @@ mod tests {
         attention.w_q = Array2::eye(4);
         attention.w_k = Array2::zeros((4, 4));
         attention.w_v = Array2::ones((4, 4));
-        attention.b_v = 1.0;
+        attention.b_v = Array1::ones(4);
 
         let (queries, keys, values) = attention.linear_projections_and_heads(x_in);
 

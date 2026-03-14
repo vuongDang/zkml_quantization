@@ -1,10 +1,8 @@
 use ndarray::prelude::*;
 
-use crate::transformer_block::{
-    ActivationFunction, AttentionLayer, LinearLayer, NormalizationLayer, TransformerBlock, silu,
-    softmax,
+use simple_zkml::transformer_block::{
+    ActivationFunction, AttentionLayer, LinearLayer, NormalizationLayer, TransformerBlock,
 };
-pub mod transformer_block;
 
 fn main() {
     let layer_norm1 = NormalizationLayer {
@@ -18,9 +16,9 @@ fn main() {
         w_k: Array2::eye(4),
         w_v: Array2::eye(4),
         w_o: Array2::eye(4),
-        b_q: 0.0,
-        b_k: 0.0,
-        b_v: 0.0,
+        b_q: Array1::zeros(4),
+        b_k: Array1::zeros(4),
+        b_v: Array1::zeros(4),
         b_o: array![0.0, 0.0, 0.0, 0.0],
         nb_heads: 2,
     };
@@ -31,7 +29,7 @@ fn main() {
     };
 
     let linear_1 = LinearLayer {
-        w: Array2::ones((4, 6)),
+        w: Array2::ones((6, 4)),
         b: Array1::ones(6),
     };
 
