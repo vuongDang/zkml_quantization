@@ -26,12 +26,12 @@ use std::{
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TransformerBlock {
-    normalization_1: NormalizationLayer,
-    attention: AttentionLayer,
-    normalization_2: NormalizationLayer,
-    linear_1: LinearLayer,
-    activation: ActivationFunction,
-    linear_2: LinearLayer,
+    pub normalization_1: NormalizationLayer,
+    pub attention: AttentionLayer,
+    pub normalization_2: NormalizationLayer,
+    pub linear_1: LinearLayer,
+    pub activation: ActivationFunction,
+    pub linear_2: LinearLayer,
 }
 
 impl TransformerBlock {
