@@ -74,6 +74,11 @@ impl<F: PrimeField, QS: QuantizationScheme<F>> QuantizedTransformerBlock<F, QS> 
 
         Ok(dequantized_out)
     }
+
+    pub fn random(scheme: &QS, d_model: usize, nb_heads: usize, d_ffn: usize) -> Self {
+        let original = TransformerBlock::random(d_model, nb_heads, d_ffn);
+        Self::new(original, scheme.clone())
+    }
 }
 
 pub struct QuantizedNormalizationLayer<F: PrimeField> {
@@ -116,10 +121,10 @@ impl<F: PrimeField> QuantizedNormalizationLayer<F> {
                 .fold(F::zero(), |acc, elem| acc + elem * elem)
                 * inv_dim;
 
+            dbg!(&variance);
+
             // Inverse of standard deviation
-            let inv_std = (variance + self.epsilon)
-                .sqrt()
-                .expect("variance + epsilon must be a quadratic residue")
+            let inv_std = layer_norm_sqrt(variance, self.epsilon)
                 .inverse()
                 .expect("must be non-zero");
 
@@ -129,6 +134,28 @@ impl<F: PrimeField> QuantizedNormalizationLayer<F> {
         }
         output
     }
+}
+
+fn layer_norm_sqrt<F: PrimeField>(variance: F, epsilon: F) -> F {
+    let mut var_eps = variance + epsilon;
+    for attempt in 0..100 {
+        match var_eps.sqrt() {
+            Some(v) => {
+                return v.inverse().expect("must be non-zero");
+            }
+            None => {
+                if attempt > 10 {
+                    panic!(
+                        "could not find sqrt after {} nudges, check epsilon scale",
+                        attempt
+                    );
+                } else {
+                    var_eps = var_eps + epsilon; // nudge by epsilon until we hit a qr
+                }
+            }
+        }
+    }
+    unreachable!()
 }
 
 pub struct QuantizedAttentionLayer<F, QS>

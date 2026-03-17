@@ -24,7 +24,7 @@ use std::{
     ops::{Div, Sub},
 };
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TransformerBlock {
     pub normalization_1: NormalizationLayer,
     pub attention: AttentionLayer,
@@ -117,7 +117,7 @@ impl TransformerBlock {
 
 use thiserror::Error;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NormalizationLayer {
     pub beta: Array1<f32>,
     pub gamma: Array1<f32>,
@@ -150,7 +150,7 @@ impl NormalizationLayer {
 }
 
 // Inputs are sequence lengths 2 and dimensions 3
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct AttentionLayer {
     pub dimension: usize,
     pub nb_heads: usize,
@@ -232,7 +232,7 @@ pub fn softmax(input: Matrix) -> Matrix {
     output
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct LinearLayer {
     pub w: Matrix,
     pub b: Array1<f32>,
@@ -252,7 +252,7 @@ impl LinearLayer {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ActivationFunction {
     GELU,
     ReLU,
